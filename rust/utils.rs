@@ -97,17 +97,12 @@ impl GaussianKernel {
         }
     }
 
-    fn evaluate_weight(&self, x: f32, y: f32) -> f32 {
+    // Accept precomputed inverse to avoid repeated inversion
+    fn evaluate_weight(&self, x: f32, y: f32, inv_sigma: &Matrix2x2) -> f32 {
         let dx = x - self.mu[0];
         let dy = y - self.mu[1];
-
-        if let Some(inv_sigma) = self.sigma.inverse() {
-            let exponent =
-                dx * dx * inv_sigma.a + 2.0 * dx * dy * inv_sigma.b + dy * dy * inv_sigma.d;
-            (-0.5 * exponent).exp()
-        } else {
-            0.0
-        }
+        let exponent = dx * dx * inv_sigma.a + 2.0 * dx * dy * inv_sigma.b + dy * dy * inv_sigma.d;
+        (-0.5 * exponent).exp()
     }
 }
 
@@ -137,55 +132,54 @@ pub fn content_adaptive_downscale_rust(
         })
         .collect();
 
-    // Pre-allocate pixel positions for efficiency
-    let pixel_positions: Vec<(usize, usize, f32, f32)> = (0..h_in)
-        .flat_map(|y| (0..w_in).map(move |x| (y, x, x as f32, y as f32)))
-        .collect();
+    let num_kernels = kernels.len();
+    let search_radius = 2.0 * rx.max(ry);
+    let search_radius_sq = search_radius * search_radius;
 
     // EM-C iterations
     for iteration in 0..num_iterations {
-        // E-Step: Compute weights in parallel chunks
-        let chunk_size = 1000; // Process pixels in chunks for memory efficiency
-        let num_kernels = kernels.len();
+        // Precompute inverse covariance matrices (safe due to clamping in C-step)
+        let inv_sigmas: Vec<Matrix2x2> = kernels
+            .par_iter()
+            .map(|kernel| kernel.sigma.inverse().unwrap())
+            .collect();
 
-        // Pre-allocate weight storage
-        let mut all_weights: Vec<Vec<(usize, f32)>> = vec![Vec::new(); num_kernels];
-        let mut gamma_sums = vec![1e-9f32; h_in * w_in];
+        // E-Step: Compute weights in parallel
+        let mut all_weights: Vec<Vec<(usize, f32)>> = (0..num_kernels)
+            .into_par_iter()
+            .map(|k| {
+                let kernel = &kernels[k];
+                let inv_sigma = &inv_sigmas[k];
 
-        // Process in chunks to manage memory
-        for chunk in pixel_positions.chunks(chunk_size) {
-            let chunk_weights: Vec<Vec<(usize, f32)>> = (0..num_kernels)
-                .into_par_iter()
-                .map(|k| {
-                    let kernel = &kernels[k];
-                    let mut weights = Vec::new();
+                // Determine local pixel bounds for this kernel
+                let x_min = (kernel.mu[0] - search_radius).max(0.0) as usize;
+                let x_max = (kernel.mu[0] + search_radius).min(w_in as f32 - 1.0) as usize + 1;
+                let y_min = (kernel.mu[1] - search_radius).max(0.0) as usize;
+                let y_max = (kernel.mu[1] + search_radius).min(h_in as f32 - 1.0) as usize + 1;
 
-                    // Limit search region for efficiency
-                    let search_radius = 2.0 * rx.max(ry);
-
-                    for &(y, x, fx, fy) in chunk {
+                let mut weights = Vec::new();
+                for y in y_min..y_max {
+                    for x in x_min..x_max {
+                        let fx = x as f32;
+                        let fy = y as f32;
                         let dx = fx - kernel.mu[0];
                         let dy = fy - kernel.mu[1];
                         let dist_sq = dx * dx + dy * dy;
 
-                        if dist_sq <= search_radius * search_radius {
-                            let weight = kernel.evaluate_weight(fx, fy);
+                        if dist_sq <= search_radius_sq {
+                            let weight = kernel.evaluate_weight(fx, fy, inv_sigma);
                             if weight > 1e-5 {
                                 weights.push((y * w_in + x, weight));
                             }
                         }
                     }
-                    weights
-                })
-                .collect();
-
-            // Merge chunk weights
-            for (k, weights) in chunk_weights.into_iter().enumerate() {
-                all_weights[k].extend(weights);
-            }
-        }
+                }
+                weights
+            })
+            .collect();
 
         // Normalize weights
+        let mut gamma_sums = vec![1e-9f32; h_in * w_in];
         for k in 0..num_kernels {
             let w_sum: f32 = all_weights[k].iter().map(|(_, w)| w).sum::<f32>() + 1e-9;
             for (pixel_idx, weight) in &mut all_weights[k] {
