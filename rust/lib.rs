@@ -10,6 +10,7 @@ use quantizer::WuQuantizerRust;
 use utils::content_adaptive_downscale_rust;
 use utils::downscale_dominant;
 use utils::downscale_mode;
+use utils::make_background_transparent_rust;
 
 /// Calculate GCD of two numbers
 fn gcd(mut a: u32, mut b: u32) -> u32 {
@@ -361,6 +362,32 @@ fn content_adaptive_downscale(
     Ok(py_array.into())
 }
 
+/// Make background transparent by flood-filling from edges
+#[pyfunction]
+fn make_background_transparent(
+    py: Python<'_>,
+    image: PyReadonlyArray3<u8>,
+    tolerance: Option<i32>,
+) -> PyResult<Py<PyArray3<u8>>> {
+    let img_array = image.as_array();
+    let tol = tolerance.unwrap_or(10);
+
+    let result = make_background_transparent_rust(&img_array, tol);
+
+    // Convert ndarray::Array3 to PyArray3
+    let (h, w, c) = result.dim();
+    let py_array = unsafe { PyArray3::<u8>::new(py, [h, w, c], false) };
+
+    // Copy data
+    for ((y, x, ch), &value) in result.indexed_iter() {
+        unsafe {
+            *py_array.uget_mut([y, x, ch]) = value;
+        }
+    }
+
+    Ok(py_array.into())
+}
+
 /// Python module
 #[pymodule]
 fn unfake(_py: Python, m: &PyModule) -> PyResult<()> {
@@ -371,6 +398,7 @@ fn unfake(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(count_unique_colors, m)?)?;
     m.add_function(wrap_pyfunction!(finalize_pixels_rust, m)?)?;
     m.add_function(wrap_pyfunction!(content_adaptive_downscale, m)?)?;
+    m.add_function(wrap_pyfunction!(make_background_transparent, m)?)?;
     m.add_class::<WuQuantizerRust>()?;
     Ok(())
 }

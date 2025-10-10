@@ -1,5 +1,4 @@
 import logging
-from typing import List, Tuple
 
 import numpy as np
 
@@ -7,12 +6,15 @@ logger = logging.getLogger("unfake.py")
 
 # Try to import Rust acceleration
 try:
-    from unfake.unfake import WuQuantizerRust  # type: ignore[import-untyped,unused-ignore,import-not-found]
+    from unfake.unfake import (  # type: ignore[import-untyped,unused-ignore,import-not-found]
+        WuQuantizerRust,
+    )  
     from unfake.unfake import content_adaptive_downscale as content_adaptive_downscale_rust
     from unfake.unfake import count_unique_colors as count_colors_rust
     from unfake.unfake import downscale_dominant_color as downscale_dominant_rust
     from unfake.unfake import downscale_mode_method as downscale_mode_rust
     from unfake.unfake import finalize_pixels_rust
+    from unfake.unfake import make_background_transparent as make_background_transparent_rust
     from unfake.unfake import map_pixels_to_palette as map_pixels_to_palette_rust
     from unfake.unfake import runs_based_detect as runs_based_detect_rust
 
@@ -43,7 +45,7 @@ def runs_based_detect_accelerated(image: np.ndarray) -> int:
 
 
 def map_pixels_to_palette_accelerated(
-    pixels: np.ndarray, palette: List[Tuple[int, int, int]]
+    pixels: np.ndarray, palette: list[tuple[int, int, int]]
 ) -> np.ndarray:
     """
     Map pixels to nearest palette colors with Rust acceleration if available.
@@ -211,7 +213,7 @@ class WuQuantizerAccelerated:
             self._impl = WuQuantizer(max_colors, significant_bits)
             self._use_rust = False
 
-    def quantize(self, pixels: np.ndarray) -> Tuple[np.ndarray, List[Tuple[int, int, int]]]:
+    def quantize(self, pixels: np.ndarray) -> tuple[np.ndarray, list[tuple[int, int, int]]]:
         """
         Quantize image colors using Wu algorithm.
 
@@ -229,6 +231,26 @@ class WuQuantizerAccelerated:
             return self._impl.quantize(pixels)  # type: ignore[no-any-return]
 
 
+def make_background_transparent_accelerated(image: np.ndarray, tolerance: int = 10) -> np.ndarray:
+    """
+    Make background transparent by flood-filling from edges with Rust acceleration if available.
+
+    Args:
+        image: Input image as numpy array (H, W, C)
+        tolerance: Color similarity tolerance (0-255)
+
+    Returns:
+        Image with transparent background
+    """
+    if RUST_AVAILABLE:
+        return make_background_transparent_rust(image, tolerance)  # type: ignore[no-any-return]
+    else:
+        # Fall back to Python implementation
+        from unfake.pixel import make_background_transparent
+
+        return make_background_transparent(image, tolerance)  # type: ignore[no-any-return]
+
+
 # Export the accelerated versions
 __all__ = [
     "runs_based_detect_accelerated",
@@ -237,6 +259,7 @@ __all__ = [
     "count_colors_accelerated",
     "finalize_pixels_accelerated",
     "content_adaptive_downscale_accelerated",
+    "make_background_transparent_accelerated",
     "WuQuantizerAccelerated",
     "RUST_AVAILABLE",
 ]

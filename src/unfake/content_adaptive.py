@@ -4,7 +4,6 @@ Based on the paper "Content-Adaptive Image Downscaling" by Kopf et al.
 """
 
 import logging
-from typing import Dict, List
 
 import cv2
 import numpy as np
@@ -70,7 +69,7 @@ def content_adaptive_core(src_lab: np.ndarray, target_w: int, target_h: int) -> 
 
         # E-Step: Compute weights
         gamma_sum_per_pixel = np.zeros((h_in, w_in)) + 1e-9
-        w_ki: List[Dict[int, float]] = [{} for _ in range(w_out * h_out)]
+        w_ki: list[dict[int, float]] = [{} for _ in range(w_out * h_out)]
 
         for k in range(w_out * h_out):
             s0, s1, s2, s3 = sigma_k[k]
@@ -115,8 +114,8 @@ def content_adaptive_core(src_lab: np.ndarray, target_w: int, target_h: int) -> 
 
         for k in range(w_out * h_out):
             w_sum = 1e-9
-            new_mu: List[float] = [0.0, 0.0]
-            new_nu: List[float] = [0.0, 0.0, 0.0]
+            new_mu: list[float] = [0.0, 0.0]
+            new_nu: list[float] = [0.0, 0.0, 0.0]
 
             for i, wk in w_ki[k].items():
                 yi = i // w_in
@@ -140,7 +139,7 @@ def content_adaptive_core(src_lab: np.ndarray, target_w: int, target_h: int) -> 
             new_nu_k.append(new_nu)
 
             # Update covariance
-            new_sigma: List[float] = [0.0, 0.0, 0.0, 0.0]
+            new_sigma: list[float] = [0.0, 0.0, 0.0, 0.0]
             for i, wk in w_ki[k].items():
                 yi = i // w_in
                 xi = i % w_in

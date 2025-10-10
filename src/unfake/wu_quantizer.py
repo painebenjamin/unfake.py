@@ -4,7 +4,6 @@ Based on Xiaolin Wu's "Color Quantization by Dynamic Programming and Principal A
 
 import logging
 from dataclasses import dataclass
-from typing import List, Tuple
 
 import numpy as np
 
@@ -31,8 +30,8 @@ class WuQuantizer:
     maximizing the variance of colors within each box.
     """
 
-    pixels: List[Tuple[int, int, int]]
-    boxes: List[Box]
+    pixels: list[tuple[int, int, int]]
+    boxes: list[Box]
 
     def __init__(self, max_colors: int = 256, significant_bits: int = 5) -> None:
         """
@@ -200,7 +199,7 @@ class WuQuantizer:
         whole_g: float,
         whole_b: float,
         whole_w: float,
-    ) -> Tuple[float, int]:
+    ) -> tuple[float, int]:
         """Find the optimal split position that maximizes variance"""
         bottom_r = self._bottom(box, direction, self.moments_r)
         bottom_g = self._bottom(box, direction, self.moments_g)
@@ -290,7 +289,7 @@ class WuQuantizer:
 
         return True
 
-    def quantize(self, pixels: np.ndarray) -> Tuple[np.ndarray, List[Tuple[int, int, int]]]:
+    def quantize(self, pixels: np.ndarray) -> tuple[np.ndarray, list[tuple[int, int, int]]]:
         """
         Perform color quantization on the given pixels
 

@@ -521,3 +521,140 @@ pub fn downscale_dominant(image: &ArrayView3<u8>, scale: usize, threshold: f32) 
 
     output
 }
+
+/// Make background transparent by flood-filling from edges
+pub fn make_background_transparent_rust(image: &ArrayView3<u8>, tolerance: i32) -> Array3<u8> {
+    let (height, width, channels) = image.dim();
+
+    // Ensure image has alpha channel
+    let (h, w, has_alpha) = if channels == 3 {
+        // Need to add alpha channel
+        (height, width, false)
+    } else {
+        (height, width, true)
+    };
+
+    // Create result with alpha channel
+    let mut result = if !has_alpha {
+        // Convert RGB to RGBA
+        let mut rgba = Array3::<u8>::zeros((h, w, 4));
+        for y in 0..h {
+            for x in 0..w {
+                rgba[(y, x, 0)] = image[(y, x, 0)];
+                rgba[(y, x, 1)] = image[(y, x, 1)];
+                rgba[(y, x, 2)] = image[(y, x, 2)];
+                rgba[(y, x, 3)] = 255; // Fully opaque
+            }
+        }
+        rgba
+    } else {
+        // Copy existing RGBA
+        let mut rgba = Array3::<u8>::zeros((h, w, 4));
+        for y in 0..h {
+            for x in 0..w {
+                rgba[(y, x, 0)] = image[(y, x, 0)];
+                rgba[(y, x, 1)] = image[(y, x, 1)];
+                rgba[(y, x, 2)] = image[(y, x, 2)];
+                rgba[(y, x, 3)] = image[(y, x, 3)];
+            }
+        }
+        rgba
+    };
+
+    let mut visited = vec![vec![false; w]; h];
+
+    // Helper function to check if two colors are similar
+    let is_similar = |c1: [u8; 3], c2: [u8; 3], tol: i32| -> bool {
+        ((c1[0] as i32 - c2[0] as i32).abs() <= tol)
+            && ((c1[1] as i32 - c2[1] as i32).abs() <= tol)
+            && ((c1[2] as i32 - c2[2] as i32).abs() <= tol)
+    };
+
+    // Flood fill function using iterative stack-based approach
+    let flood_fill = |result: &mut Array3<u8>,
+                      visited: &mut Vec<Vec<bool>>,
+                      start_y: usize,
+                      start_x: usize,
+                      tol: i32| {
+        // Skip if already visited or transparent
+        if visited[start_y][start_x] || result[(start_y, start_x, 3)] < 128 {
+            return;
+        }
+
+        let target_color = [
+            result[(start_y, start_x, 0)],
+            result[(start_y, start_x, 1)],
+            result[(start_y, start_x, 2)],
+        ];
+
+        let mut stack = vec![(start_y, start_x)];
+
+        while let Some((y, x)) = stack.pop() {
+            // Bounds check
+            if y >= h || x >= w {
+                continue;
+            }
+
+            // Skip if already visited
+            if visited[y][x] {
+                continue;
+            }
+
+            // Skip if already transparent
+            if result[(y, x, 3)] < 128 {
+                visited[y][x] = true;
+                continue;
+            }
+
+            // Check if color matches
+            let current_color = [result[(y, x, 0)], result[(y, x, 1)], result[(y, x, 2)]];
+            if !is_similar(current_color, target_color, tol) {
+                continue;
+            }
+
+            // Mark as visited and make transparent
+            visited[y][x] = true;
+            result[(y, x, 0)] = 0;
+            result[(y, x, 1)] = 0;
+            result[(y, x, 2)] = 0;
+            result[(y, x, 3)] = 0;
+
+            // Add neighbors to stack (with bounds checking)
+            if y > 0 {
+                stack.push((y - 1, x)); // up
+            }
+            if y + 1 < h {
+                stack.push((y + 1, x)); // down
+            }
+            if x > 0 {
+                stack.push((y, x - 1)); // left
+            }
+            if x + 1 < w {
+                stack.push((y, x + 1)); // right
+            }
+        }
+    };
+
+    // Flood fill from all edges
+    // Top and bottom edges
+    for x in 0..w {
+        if !visited[0][x] {
+            flood_fill(&mut result, &mut visited, 0, x, tolerance);
+        }
+        if !visited[h - 1][x] {
+            flood_fill(&mut result, &mut visited, h - 1, x, tolerance);
+        }
+    }
+
+    // Left and right edges
+    for y in 0..h {
+        if !visited[y][0] {
+            flood_fill(&mut result, &mut visited, y, 0, tolerance);
+        }
+        if !visited[y][w - 1] {
+            flood_fill(&mut result, &mut visited, y, w - 1, tolerance);
+        }
+    }
+
+    result
+}
