@@ -22,6 +22,7 @@ Images taken from examples for AI pixel art models like [Pixel Art XL](https://h
 - **Advanced Color Quantization**: Wu color quantization algorithm with Rust acceleration
 - **Smart Downscaling**: Multiple methods including dominant color, median, mode, and content-adaptive
 - **Image Cleanup**: Alpha binarization, morphological operations, and jaggy edge removal
+- **Transparent Background**: Automatic background removal using edge-based flood fill
 - **Grid Snapping**: Automatic alignment to pixel grid for clean results
 - **Flexible API**: Both synchronous and asynchronous interfaces
 - **Fast**: Process a 1-megapixel image in as fast as half a second.
@@ -94,6 +95,9 @@ unfake input.png --alpha-threshold 200    # Higher threshold for alpha binarizat
 unfake input.png --threshold 0.1          # Dominant color threshold (0.0-1.0)
 unfake input.png --no-snap                # Disable grid snapping
 
+# Make background transparent
+unfake input.png --transparent-background # Flood-fill background from edges
+
 # Verbose output
 unfake input.png -v                       # Show detailed processing info
 ```
@@ -131,6 +135,12 @@ result = unfake.process_image_sync(
     "input.png",
     fixed_palette=fixed_colors
 )
+
+# Make background transparent
+result = unfake.process_image_sync(
+    "input.png",
+    transparent_background=True          # Flood-fill background from edges
+)
 ```
 
 #### Asynchronous API
@@ -146,7 +156,8 @@ async def process_image_async():
         detect_method="runs",
         downscale_method="median",
         cleanup={"morph": True, "jaggy": False},
-        snap_grid=True
+        snap_grid=True,
+        transparent_background=True          # Optional: make background transparent
     )
     result["image"].save("output.png")
 
@@ -170,6 +181,14 @@ asyncio.run(process_image_async())
 #### Cleanup Options
 - **`morph`**: Morphological operations to remove noise
 - **`jaggy`**: Removes isolated diagonal pixels
+
+#### Transparent Background
+When enabled (`transparent_background=True` or `--transparent-background`), the tool automatically removes the background by flood-filling from the image edges. This feature:
+- Uses edge-based flood fill to detect background regions
+- Converts background pixels to transparent
+- Uses a configurable tolerance for color matching (default: 10)
+- Works with both RGB and RGBA images
+- Includes Rust acceleration for better performance
 
 ## Performance
 Example processing times for a 1024x1024 image on a high-end Intel desktop CPU using defaults:
