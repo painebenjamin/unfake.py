@@ -516,8 +516,12 @@ pub fn downscale_dominant(image: &ArrayView3<u8>, scale: usize, threshold: f32) 
     output
 }
 
-/// Make background transparent by flood-filling from edges
-pub fn make_background_transparent_rust(image: &ArrayView3<u8>, tolerance: i32) -> Array3<u8> {
+/// Make background transparent by flood-filling from specified starting points
+pub fn make_background_transparent_rust(
+    image: &ArrayView3<u8>,
+    tolerance: i32,
+    mode: &str,
+) -> Array3<u8> {
     let (height, width, channels) = image.dim();
 
     // Ensure image has alpha channel
@@ -629,24 +633,63 @@ pub fn make_background_transparent_rust(image: &ArrayView3<u8>, tolerance: i32) 
         }
     };
 
-    // Flood fill from all edges
-    // Top and bottom edges
-    for x in 0..w {
-        if !visited[0][x] {
-            flood_fill(&mut result, &mut visited, 0, x, tolerance);
+    // Flood fill based on mode
+    if mode == "corners" {
+        // Only flood fill from the four corners
+        if !visited[0][0] {
+            flood_fill(&mut result, &mut visited, 0, 0, tolerance);
         }
-        if !visited[h - 1][x] {
-            flood_fill(&mut result, &mut visited, h - 1, x, tolerance);
+        if !visited[0][w - 1] {
+            flood_fill(&mut result, &mut visited, 0, w - 1, tolerance);
         }
-    }
+        if !visited[h - 1][0] {
+            flood_fill(&mut result, &mut visited, h - 1, 0, tolerance);
+        }
+        if !visited[h - 1][w - 1] {
+            flood_fill(&mut result, &mut visited, h - 1, w - 1, tolerance);
+        }
+    } else if mode == "midpoints" {
+        // Flood fill from the midpoint of each edge
+        let mid_x = w / 2;
+        let mid_y = h / 2;
 
-    // Left and right edges
-    for y in 0..h {
-        if !visited[y][0] {
-            flood_fill(&mut result, &mut visited, y, 0, tolerance);
+        // Top edge midpoint
+        if !visited[0][mid_x] {
+            flood_fill(&mut result, &mut visited, 0, mid_x, tolerance);
         }
-        if !visited[y][w - 1] {
-            flood_fill(&mut result, &mut visited, y, w - 1, tolerance);
+        // Bottom edge midpoint
+        if !visited[h - 1][mid_x] {
+            flood_fill(&mut result, &mut visited, h - 1, mid_x, tolerance);
+        }
+        // Left edge midpoint
+        if !visited[mid_y][0] {
+            flood_fill(&mut result, &mut visited, mid_y, 0, tolerance);
+        }
+        // Right edge midpoint
+        if !visited[mid_y][w - 1] {
+            flood_fill(&mut result, &mut visited, mid_y, w - 1, tolerance);
+        }
+    } else {
+        // mode == "edges" (default)
+        // Flood fill from all edges
+        // Top and bottom edges
+        for x in 0..w {
+            if !visited[0][x] {
+                flood_fill(&mut result, &mut visited, 0, x, tolerance);
+            }
+            if !visited[h - 1][x] {
+                flood_fill(&mut result, &mut visited, h - 1, x, tolerance);
+            }
+        }
+
+        // Left and right edges
+        for y in 0..h {
+            if !visited[y][0] {
+                flood_fill(&mut result, &mut visited, y, 0, tolerance);
+            }
+            if !visited[y][w - 1] {
+                flood_fill(&mut result, &mut visited, y, w - 1, tolerance);
+            }
         }
     }
 

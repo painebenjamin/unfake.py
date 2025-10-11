@@ -362,17 +362,19 @@ fn content_adaptive_downscale(
     Ok(py_array.into())
 }
 
-/// Make background transparent by flood-filling from edges
+/// Make background transparent by flood-filling from specified starting points
 #[pyfunction]
 fn make_background_transparent(
     py: Python<'_>,
     image: PyReadonlyArray3<u8>,
     tolerance: Option<i32>,
+    mode: Option<&str>,
 ) -> PyResult<Py<PyArray3<u8>>> {
     let img_array = image.as_array();
     let tol = tolerance.unwrap_or(10);
+    let bg_mode = mode.unwrap_or("edges");
 
-    let result = make_background_transparent_rust(&img_array, tol);
+    let result = make_background_transparent_rust(&img_array, tol, bg_mode);
 
     // Convert ndarray::Array3 to PyArray3
     let (h, w, c) = result.dim();

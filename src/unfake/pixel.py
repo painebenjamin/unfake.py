@@ -340,20 +340,24 @@ def jaggy_cleaner(image: np.ndarray) -> np.ndarray:
     return result  # type: ignore[no-any-return]
 
 
-def make_background_transparent(image: np.ndarray, tolerance: int = 1) -> np.ndarray:
+def make_background_transparent(
+    image: np.ndarray, tolerance: int = 1, mode: str = "edges"
+) -> np.ndarray:
     """
-    Make background transparent by flood-filling from edges
+    Make background transparent by flood-filling from specified starting points
 
     Args:
         image: Input image (RGB or RGBA)
         tolerance: Color similarity tolerance (0-255)
+        mode: Flood-fill starting mode - "edges" (all edge pixels), "corners" (four corners),
+              or "midpoints" (midpoint of each edge)
 
     Returns:
         Image with transparent background
     """
     # Use accelerated version if available
     if "RUST_AVAILABLE" in globals() and RUST_AVAILABLE:
-        return make_background_transparent_accelerated(image, tolerance)
+        return make_background_transparent_accelerated(image, tolerance, mode)
 
     # Fallback to Python implementation
     # Ensure image has alpha channel
@@ -411,20 +415,49 @@ def make_background_transparent(image: np.ndarray, tolerance: int = 1) -> np.nda
             stack.append((y, x - 1))  # left
             stack.append((y, x + 1))  # right
 
-    # Flood fill from all edges
-    # Top and bottom edges
-    for x in range(w):
-        if not visited[0, x]:
-            flood_fill(0, x)
-        if not visited[h - 1, x]:
-            flood_fill(h - 1, x)
+    # Flood fill based on mode
+    if mode == "corners":
+        # Only flood fill from the four corners
+        if not visited[0, 0]:
+            flood_fill(0, 0)
+        if not visited[0, w - 1]:
+            flood_fill(0, w - 1)
+        if not visited[h - 1, 0]:
+            flood_fill(h - 1, 0)
+        if not visited[h - 1, w - 1]:
+            flood_fill(h - 1, w - 1)
+    elif mode == "midpoints":
+        # Flood fill from the midpoint of each edge
+        mid_x = w // 2
+        mid_y = h // 2
 
-    # Left and right edges
-    for y in range(h):
-        if not visited[y, 0]:
-            flood_fill(y, 0)
-        if not visited[y, w - 1]:
-            flood_fill(y, w - 1)
+        # Top edge midpoint
+        if not visited[0, mid_x]:
+            flood_fill(0, mid_x)
+        # Bottom edge midpoint
+        if not visited[h - 1, mid_x]:
+            flood_fill(h - 1, mid_x)
+        # Left edge midpoint
+        if not visited[mid_y, 0]:
+            flood_fill(mid_y, 0)
+        # Right edge midpoint
+        if not visited[mid_y, w - 1]:
+            flood_fill(mid_y, w - 1)
+    else:  # mode == "edges" (default)
+        # Flood fill from all edges
+        # Top and bottom edges
+        for x in range(w):
+            if not visited[0, x]:
+                flood_fill(0, x)
+            if not visited[h - 1, x]:
+                flood_fill(h - 1, x)
+
+        # Left and right edges
+        for y in range(h):
+            if not visited[y, 0]:
+                flood_fill(y, 0)
+            if not visited[y, w - 1]:
+                flood_fill(y, w - 1)
 
     return result  # type: ignore[no-any-return]
 
@@ -735,6 +768,7 @@ async def process_image(
     fixed_palette: list[str] | None = None,
     alpha_threshold: int = 128,
     background_tolerance: int = 1,
+    background_mode: str = "edges",
     snap_grid: bool = True,
     auto_color_detect: bool = False,
     transparent_background: bool = False,
@@ -754,6 +788,8 @@ async def process_image(
         fixed_palette: Optional fixed color palette (hex strings)
         alpha_threshold: Alpha binarization threshold (0-255)
         background_tolerance: Background tolerance for transparent background (0-255)
+        background_mode: Flood-fill mode - "edges" (all edge pixels), "corners" (four corners),
+                        or "midpoints" (midpoint of each edge)
         snap_grid: Whether to snap to pixel grid
         auto_color_detect: Force automatic color detection
         transparent_background: Whether to make background transparent
@@ -904,8 +940,8 @@ async def process_image(
 
     # 6.5. Make background transparent
     if transparent_background:
-        logger.info("Making background transparent")
-        current = make_background_transparent(current, background_tolerance)
+        logger.info(f"Making background transparent (mode={background_mode})")
+        current = make_background_transparent(current, background_tolerance, background_mode)
 
     # 7. Extract palette and save
     palette = extract_palette(current)
@@ -944,6 +980,7 @@ async def process_image(
             },
             "background_transparent": {
                 "tolerance": background_tolerance,
+                "mode": background_mode,
                 "applied": transparent_background,
             },
             "grid_snapping": {"enabled": snap_grid, "applied": snap_grid and scale > 1},
@@ -1017,7 +1054,16 @@ Examples:
         "--transparent-background", action="store_true", help="Make background transparent"
     )
     parser.add_argument(
-        "--background-tolerance", type=int, default=1, help="Background tolerance for transparent background (default: 1)"
+        "--background-tolerance",
+        type=int,
+        default=1,
+        help="Background tolerance for transparent background (default: 1)",
+    )
+    parser.add_argument(
+        "--background-mode",
+        choices=["edges", "corners", "midpoints"],
+        default="edges",
+        help="Flood-fill mode: edges (all edge pixels), corners (four corners), or midpoints (edge midpoints) (default: edges)",
     )
     parser.add_argument("--palette", help="Fixed palette file (hex colors, one per line)")
     parser.add_argument(
@@ -1070,6 +1116,7 @@ Examples:
             fixed_palette=fixed_palette,
             alpha_threshold=args.alpha_threshold,
             background_tolerance=args.background_tolerance,
+            background_mode=args.background_mode,
             snap_grid=not args.no_snap,
             auto_color_detect=args.auto_colors,
             transparent_background=args.transparent_background,

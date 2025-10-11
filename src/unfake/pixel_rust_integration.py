@@ -6,14 +6,16 @@ logger = logging.getLogger("unfake.py")
 
 # Try to import Rust acceleration
 try:
-    from unfake.unfake import (  # type: ignore[import-untyped,unused-ignore,import-not-found]
+    from unfake.unfake import (
         WuQuantizerRust,
-    )  
+    )  # type: ignore[import-untyped,unused-ignore,import-not-found]
     from unfake.unfake import content_adaptive_downscale as content_adaptive_downscale_rust
     from unfake.unfake import count_unique_colors as count_colors_rust
     from unfake.unfake import downscale_dominant_color as downscale_dominant_rust
     from unfake.unfake import downscale_mode_method as downscale_mode_rust
-    from unfake.unfake import finalize_pixels_rust
+    from unfake.unfake import (
+        finalize_pixels_rust,
+    )  # type: ignore[import-untyped,unused-ignore,import-not-found]
     from unfake.unfake import make_background_transparent as make_background_transparent_rust
     from unfake.unfake import map_pixels_to_palette as map_pixels_to_palette_rust
     from unfake.unfake import runs_based_detect as runs_based_detect_rust
@@ -231,24 +233,28 @@ class WuQuantizerAccelerated:
             return self._impl.quantize(pixels)  # type: ignore[no-any-return]
 
 
-def make_background_transparent_accelerated(image: np.ndarray, tolerance: int = 10) -> np.ndarray:
+def make_background_transparent_accelerated(
+    image: np.ndarray, tolerance: int = 10, mode: str = "edges"
+) -> np.ndarray:
     """
-    Make background transparent by flood-filling from edges with Rust acceleration if available.
+    Make background transparent by flood-filling from specified starting points with Rust acceleration if available.
 
     Args:
         image: Input image as numpy array (H, W, C)
         tolerance: Color similarity tolerance (0-255)
+        mode: Flood-fill starting mode - "edges" (all edge pixels), "corners" (four corners),
+              or "midpoints" (midpoint of each edge)
 
     Returns:
         Image with transparent background
     """
     if RUST_AVAILABLE:
-        return make_background_transparent_rust(image, tolerance)  # type: ignore[no-any-return]
+        return make_background_transparent_rust(image, tolerance, mode)  # type: ignore[no-any-return]
     else:
         # Fall back to Python implementation
         from unfake.pixel import make_background_transparent
 
-        return make_background_transparent(image, tolerance)  # type: ignore[no-any-return]
+        return make_background_transparent(image, tolerance, mode)  # type: ignore[no-any-return]
 
 
 # Export the accelerated versions
