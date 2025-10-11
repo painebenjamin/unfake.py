@@ -340,7 +340,7 @@ def jaggy_cleaner(image: np.ndarray) -> np.ndarray:
     return result  # type: ignore[no-any-return]
 
 
-def make_background_transparent(image: np.ndarray, tolerance: int = 10) -> np.ndarray:
+def make_background_transparent(image: np.ndarray, tolerance: int = 1) -> np.ndarray:
     """
     Make background transparent by flood-filling from edges
 
@@ -734,6 +734,7 @@ async def process_image(
     cleanup: dict[str, bool] | None = None,
     fixed_palette: list[str] | None = None,
     alpha_threshold: int = 128,
+    background_tolerance: int = 1,
     snap_grid: bool = True,
     auto_color_detect: bool = False,
     transparent_background: bool = False,
@@ -752,6 +753,7 @@ async def process_image(
         cleanup: Cleanup options dict with 'morph' and 'jaggy' keys
         fixed_palette: Optional fixed color palette (hex strings)
         alpha_threshold: Alpha binarization threshold (0-255)
+        background_tolerance: Background tolerance for transparent background (0-255)
         snap_grid: Whether to snap to pixel grid
         auto_color_detect: Force automatic color detection
         transparent_background: Whether to make background transparent
@@ -903,7 +905,7 @@ async def process_image(
     # 6.5. Make background transparent
     if transparent_background:
         logger.info("Making background transparent")
-        current = make_background_transparent(current)
+        current = make_background_transparent(current, background_tolerance)
 
     # 7. Extract palette and save
     palette = extract_palette(current)
@@ -939,6 +941,10 @@ async def process_image(
             "alpha_processing": {
                 "threshold": alpha_threshold,
                 "binarized": alpha_threshold is not None,
+            },
+            "background_transparent": {
+                "tolerance": background_tolerance,
+                "applied": transparent_background,
             },
             "grid_snapping": {"enabled": snap_grid, "applied": snap_grid and scale > 1},
         },
@@ -1010,6 +1016,9 @@ Examples:
     parser.add_argument(
         "--transparent-background", action="store_true", help="Make background transparent"
     )
+    parser.add_argument(
+        "--background-tolerance", type=int, default=1, help="Background tolerance for transparent background (default: 1)"
+    )
     parser.add_argument("--palette", help="Fixed palette file (hex colors, one per line)")
     parser.add_argument(
         "--alpha-threshold",
@@ -1060,6 +1069,7 @@ Examples:
             cleanup=cleanup_options,
             fixed_palette=fixed_palette,
             alpha_threshold=args.alpha_threshold,
+            background_tolerance=args.background_tolerance,
             snap_grid=not args.no_snap,
             auto_color_detect=args.auto_colors,
             transparent_background=args.transparent_background,

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "unfake"
-version = "1.0.5"
+version = "1.0.6"
 description = "High-performance tool for improving AI-generated pixel art"
 readme = "README.md"
 authors = [
